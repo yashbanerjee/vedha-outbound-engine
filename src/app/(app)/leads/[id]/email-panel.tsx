@@ -87,7 +87,7 @@ export function EmailPanel({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const useTemplate = (id: string) => {
+  const applyTemplate = (id: string) => {
     setTemplateId(id);
     const template = templates.find((t) => t.id === id);
     if (!template) return;
@@ -102,7 +102,7 @@ export function EmailPanel({
       return;
     }
     const template = templates.find((t) => t.id === templateId) ?? templates[0];
-    if (template) useTemplate(template.id);
+    if (template) applyTemplate(template.id);
     else setOpen(true);
   };
 
@@ -147,7 +147,7 @@ export function EmailPanel({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Template</Label>
-                <Select value={templateId} onValueChange={useTemplate}>
+                <Select value={templateId} onValueChange={applyTemplate}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Start from a template" />
                   </SelectTrigger>

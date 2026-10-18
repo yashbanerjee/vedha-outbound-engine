@@ -36,6 +36,10 @@ export async function pollInbox(db: Db, log: (message: string) => void = () => u
     auth: { user: settings.username, pass: password },
     logger: false,
   });
+  // A dropped connection emits "error". Without a listener that kills the worker.
+  client.on("error", (err) => {
+    log(`mail: ${err instanceof Error ? err.message : String(err)}`);
+  });
 
   try {
     await client.connect();
