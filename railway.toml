@@ -1,0 +1,9 @@
+[build]
+buildCommand = "pnpm db:generate && pnpm build"
+
+[deploy]
+preDeployCommand = "pnpm db:deploy && pnpm db:seed"
+startCommand = "pnpm start"
+healthcheckPath = "/login"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"

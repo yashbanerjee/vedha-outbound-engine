@@ -16,4 +16,4 @@ FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app ./
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["sh", "-c", "pnpm db:deploy && pnpm db:seed && pnpm start"]
