@@ -1,0 +1,383 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Access control ----------
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  accessRules LeadAccessRule[]
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  managerId   String?
+  manager     User?    @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     User[]           @relation("TeamMembers")
+  accessRules LeadAccessRule[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  isActive     Boolean  @default(true)
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  teamId       String?
+  team         Team?    @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  managedTeams     Team[]         @relation("TeamManager")
+  assignments      Assignment[]   @relation("AssignedTo")
+  assignmentsMade  Assignment[]   @relation("AssignedBy")
+  comments         LeadComment[]
+  activities       LeadActivity[]
+  importJobs       ImportJob[]
+  emailsSent       EmailMessage[] @relation("EmailSentBy")
+  notifications    Notification[]
+}
+
+/// Restricts which leads a team or role can see in the archive.
+/// Admins (leads.view_all) bypass rules. Assigned leads are always visible to the assignee.
+model LeadAccessRule {
+  id          String   @id @default(cuid())
+  name        String
+  roleId      String?
+  role        Role?    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sourceIds   String[] @default([])
+  industries  String[] @default([])
+  countries   String[] @default([])
+  tags        String[] @default([])
+  minAiScore  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------- Leads ----------
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+  NOT_INTERESTED
+}
+
+enum AiVerdict {
+  GOOD
+  MAYBE
+  BAD
+}
+
+model LeadSource {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  leads      Lead[]
+  importJobs ImportJob[]
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  companyName String
+  website     String?
+  domain      String?    @unique
+  contactName String?
+  email       String?
+  /// Result of the email check: syntax, disposable blocklist and live MX lookup
+  emailStatus EmailStatus?
+  emailStatusDetail String?
+  emailCheckedAt DateTime?
+
+  /// Follow-up cycle. Set when the lead is first marked Contacted; the next
+  /// follow-up becomes due once `now` passes `nextFollowUpAt`.
+  contactedAt        DateTime?
+  followUpStage      Int       @default(0)
+  nextFollowUpAt     DateTime?
+  lastFollowUpAt     DateTime?
+  phone       String?
+  industry    String?
+  country     String?
+  city        String?
+  tags        String[]   @default([])
+  notes       String?
+  /// Extra CSV columns the importer kept as additional fields (label -> value)
+  customFields Json?
+  /// The full original CSV row, untouched
+  rawData     Json?
+  status      LeadStatus @default(NEW)
+  sourceId    String?
+  source      LeadSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  importJobId String?
+  importJob   ImportJob?  @relation(fields: [importJobId], references: [id], onDelete: SetNull)
+
+  aiScore            Int?
+  aiVerdict          AiVerdict?
+  aiSummary          String?
+  aiReasons          String[]  @default([])
+  aiDetectedIndustry String?
+  aiScoredAt         DateTime?
+  aiError            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments Assignment[]
+  comments    LeadComment[]
+  activities  LeadActivity[]
+  aiJobs      AiScoringJob[]
+  emails      EmailMessage[]
+
+  @@index([status])
+  @@index([emailStatus])
+  @@index([nextFollowUpAt])
+  @@index([sourceId])
+  @@index([industry])
+  @@index([country])
+  @@index([aiVerdict])
+  @@index([aiScore])
+  @@index([email])
+  @@index([createdAt])
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+model Assignment {
+  id           String           @id @default(cuid())
+  leadId       String
+  lead         Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation("AssignedTo", fields: [userId], references: [id], onDelete: Cascade)
+  assignedById String?
+  assignedBy   User?            @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  weekStart    DateTime         @db.Date
+  status       AssignmentStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([leadId, userId])
+  @@index([userId, weekStart])
+  @@index([weekStart])
+}
+
+model LeadComment {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+/// How far the email check got. UNVERIFIED means the syntax is fine but the
+/// mail server could not be reached (no internet, or it blocked the check).
+enum EmailStatus {
+  VALID
+  INVALID
+  DISPOSABLE
+  NO_MX
+  UNVERIFIED
+}
+
+enum ActivityType {
+  CREATED
+  IMPORTED
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  COMMENTED
+  AI_SCORED
+  UPDATED
+  FOLLOW_UP
+  EMAIL_SENT
+  EMAIL_RECEIVED
+}
+
+model LeadActivity {
+  id        String       @id @default(cuid())
+  leadId    String
+  lead      Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      ActivityType
+  message   String
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+// ---------- AI ----------
+
+model AiSettings {
+  id                   String   @id @default("default")
+  enabled              Boolean  @default(true)
+  model                String   @default("gpt-4o-mini")
+  idealCustomerProfile String   @default("")
+  scoringCriteria      String   @default("")
+  goodThreshold        Int      @default(70)
+  badThreshold         Int      @default(40)
+  autoScoreOnImport    Boolean  @default(true)
+  /// Days after first contact when each follow-up email is due.
+  followUpDays         Int[]    @default([3, 5, 10])
+  maxChars             Int      @default(6000)
+  maxPages             Int      @default(3)
+  updatedAt            DateTime @updatedAt
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+model AiScoringJob {
+  id          String    @id @default(cuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAfter    DateTime  @default(now())
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, runAfter])
+  @@index([leadId])
+}
+
+model ImportJob {
+  id             String    @id @default(cuid())
+  fileName       String
+  createdById    String
+  createdBy      User      @relation(fields: [createdById], references: [id])
+  sourceId       String?
+  source         LeadSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  totalRows      Int       @default(0)
+  importedCount  Int       @default(0)
+  skippedCount   Int       @default(0)
+  errorCount     Int       @default(0)
+  status         JobStatus @default(DONE)
+  errors         Json?
+  createdAt      DateTime  @default(now())
+
+  leads Lead[]
+}
+
+/// The one shared mailbox every employee sends from. Configured by an admin in the app.
+model MailSettings {
+  id              String    @id @default("default")
+  enabled         Boolean   @default(false)
+  fromAddress     String    @default("")
+  fromName        String    @default("")
+  smtpHost        String    @default("")
+  smtpPort        Int       @default(465)
+  smtpSecure      Boolean   @default(true)
+  imapHost        String    @default("")
+  imapPort        Int       @default(993)
+  imapSecure      Boolean   @default(true)
+  username        String    @default("")
+  /// AES-256-GCM ciphertext of the mailbox password. Never sent back to the browser.
+  passwordEnc     String?
+  sentFolder      String    @default("Sent")
+  lastImapUid     Int?
+  imapUidValidity String?
+  lastPolledAt    DateTime?
+  lastPollError   String?
+  updatedAt       DateTime  @updatedAt
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  bodyHtml  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum EmailDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum EmailDeliveryStatus {
+  SENT
+  FAILED
+  RECEIVED
+}
+
+model EmailMessage {
+  id          String              @id @default(cuid())
+  leadId      String
+  lead        Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction   EmailDirection
+  status      EmailDeliveryStatus
+  sentById    String?
+  sentBy      User?               @relation("EmailSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  subject     String
+  bodyHtml    String              @default("")
+  bodyText    String              @default("")
+  fromAddress String
+  toAddress   String
+  messageId   String?             @unique
+  inReplyTo   String?
+  error       String?
+  createdAt   DateTime            @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+enum NotificationType {
+  EMAIL_REPLY
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  leadId    String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+}
