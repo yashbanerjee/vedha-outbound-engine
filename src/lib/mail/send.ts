@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
 import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { VEDHA_LOGO_CID, VEDHA_LOGO_PATH, publicLogoSrc, withEmailLogo } from "@/lib/mail/brand";
 import { htmlToText } from "@/lib/mail/merge";
 import { getMailboxCredentials } from "@/lib/mail/settings";
 import { getFollowUpDays, nextFollowUpDate } from "@/lib/leads/followups";
@@ -40,10 +37,7 @@ export async function sendLeadEmail(
 
   const domain = mailbox.fromAddress.split("@")[1] || "localhost";
   const messageId = `${randomUUID()}@${domain}`;
-  const logo = await readFile(path.join(process.cwd(), "public", "vedha-logo.png")).catch(() => null);
-  const storedHtml = logo ? withEmailLogo(input.html, VEDHA_LOGO_PATH) : input.html;
-  const outboundHtml = logo ? withEmailLogo(input.html, `cid:${VEDHA_LOGO_CID}`) : input.html;
-  const text = htmlToText(storedHtml);
+  const text = htmlToText(input.html);
   const fromHeader = `${input.userName} <${mailbox.fromAddress}>`;
 
   const transport = nodemailer.createTransport({
@@ -59,10 +53,9 @@ export async function sendLeadEmail(
       to: lead.email,
       replyTo: mailbox.fromAddress,
       subject: input.subject,
-      html: outboundHtml,
+      html: input.html,
       text,
       messageId: `<${messageId}>`,
-      attachments: logo ? [{ filename: "vedha-logo.png", content: logo, cid: VEDHA_LOGO_CID, contentDisposition: "inline" as const }] : undefined,
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Could not send.";
@@ -73,7 +66,7 @@ export async function sendLeadEmail(
         status: "FAILED",
         sentById: input.userId,
         subject: input.subject,
-        bodyHtml: storedHtml,
+        bodyHtml: input.html,
         bodyText: text,
         fromAddress: mailbox.fromAddress,
         toAddress: lead.email,
@@ -85,8 +78,7 @@ export async function sendLeadEmail(
   }
 
   // Best effort: keep the shared mailbox's Sent folder in sync. Sending already succeeded.
-  const sentCopyHtml = logo ? withEmailLogo(input.html, publicLogoSrc()) : input.html;
-  await appendToSent(mailbox, { from: fromHeader, to: lead.email, subject: input.subject, messageId, html: sentCopyHtml }).catch(() => undefined);
+  await appendToSent(mailbox, { from: fromHeader, to: lead.email, subject: input.subject, messageId, html: input.html }).catch(() => undefined);
 
   const days = lead.status === "CONTACTED" && lead.contactedAt && lead.nextFollowUpAt && lead.nextFollowUpAt <= new Date() ? await getFollowUpDays() : null;
 
@@ -98,7 +90,7 @@ export async function sendLeadEmail(
         status: "SENT",
         sentById: input.userId,
         subject: input.subject,
-        bodyHtml: storedHtml,
+        bodyHtml: input.html,
         bodyText: text,
         fromAddress: mailbox.fromAddress,
         toAddress: lead.email!,
