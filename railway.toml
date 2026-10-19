@@ -3,9 +3,9 @@ buildCommand = "pnpm db:generate && pnpm build"
 
 [deploy]
 preDeployCommand = "pnpm db:deploy && pnpm db:seed"
-# Inbox polling and AI scoring start inside this process on Railway.
-# If you add a separate service running `pnpm worker`, set EMBEDDED_WORKER=false here.
-startCommand = "pnpm start"
+# Inbox polling runs beside the web server. Next.js cannot import that worker during build.
+# Set EMBEDDED_WORKER=false only when another service is already running `pnpm worker`.
+startCommand = "sh -c 'if [ \"$EMBEDDED_WORKER\" != false ]; then while true; do pnpm worker; sleep 5; done & fi; exec pnpm start'"
 healthcheckPath = "/login"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
