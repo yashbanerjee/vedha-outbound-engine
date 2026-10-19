@@ -3,6 +3,8 @@ buildCommand = "pnpm db:generate && pnpm build"
 
 [deploy]
 preDeployCommand = "pnpm db:deploy && pnpm db:seed"
+# Inbox polling and AI scoring start inside this process on Railway.
+# If you add a separate service running `pnpm worker`, set EMBEDDED_WORKER=false here.
 startCommand = "pnpm start"
 healthcheckPath = "/login"
 healthcheckTimeout = 60

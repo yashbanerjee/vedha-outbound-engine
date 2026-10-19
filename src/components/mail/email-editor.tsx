@@ -24,6 +24,9 @@ export function EmailEditor({ value, onChange }: { value: string; onChange: (htm
 
   return (
     <div className="overflow-hidden rounded-lg border">
+      <div className="border-b bg-black px-3 py-3">
+        <img src="/vedha-logo.png" alt="Vedha" className="h-auto w-28" />
+      </div>
       <div className="flex items-center gap-0.5 border-b bg-muted/40 p-1">
         {mode === "visual" && (
           <>

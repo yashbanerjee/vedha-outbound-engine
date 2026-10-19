@@ -8,7 +8,7 @@ import { normalizeMessageId } from "@/lib/mail/send";
 
 type Db = PrismaClient | typeof prisma;
 
-export type PollResult = { imported: number; scanned: number; error?: string };
+export type PollResult = { imported: number; scanned: number; error?: string; skipped?: "disabled" };
 
 /**
  * Reads new mail from the shared inbox and files replies against the lead they
@@ -18,7 +18,9 @@ export type PollResult = { imported: number; scanned: number; error?: string };
  */
 export async function pollInbox(db: Db, log: (message: string) => void = () => undefined): Promise<PollResult> {
   const settings = await db.mailSettings.findUnique({ where: { id: "default" } });
-  if (!settings?.enabled || !settings.passwordEnc || !settings.imapHost || !settings.username) return { imported: 0, scanned: 0 };
+  if (!settings?.enabled || !settings.passwordEnc || !settings.imapHost || !settings.username) {
+    return { imported: 0, scanned: 0, skipped: "disabled" };
+  }
 
   let password: string;
   try {
