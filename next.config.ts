@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
-  serverExternalPackages: ["@prisma/client", "bcryptjs", "nodemailer", "imapflow", "mailparser"],
+  serverExternalPackages: ["@prisma/client", "bcryptjs", "nodemailer", "imapflow", "mailparser", "@zone-eu/mailsplit"],
 };
 
 export default nextConfig;
