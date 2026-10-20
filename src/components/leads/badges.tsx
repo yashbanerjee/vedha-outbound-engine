@@ -1,13 +1,17 @@
+"use client";
+
 import type { AiVerdict, EmailStatus, LeadStatus } from "@prisma/client";
 import { Check, HelpCircle, Sparkles, TriangleAlert, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { AI_VERDICT_CLASS, AI_VERDICT_LABEL, LEAD_STATUS_CLASS, LEAD_STATUS_LABEL } from "@/lib/leads/constants";
+import { AI_VERDICT_CLASS, AI_VERDICT_LABEL, LEAD_STATUS_CLASS } from "@/lib/leads/constants";
+import { useStatusLabel } from "@/components/leads/status-label-context";
 
 export function StatusBadge({ status, className }: { status: LeadStatus; className?: string }) {
+  const label = useStatusLabel(status);
   return (
     <Badge variant="outline" className={cn(LEAD_STATUS_CLASS[status], className)}>
-      {LEAD_STATUS_LABEL[status]}
+      {label}
     </Badge>
   );
 }
@@ -48,6 +52,8 @@ export function AiBadge({
 
 const EMAIL_STATUS_META: Record<EmailStatus, { label: string; className: string; Icon: typeof Check }> = {
   VALID: { label: "Deliverable", className: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: Check },
+  DOMAIN: { label: "Unconfirmed", className: "bg-sky-50 text-sky-800 border-sky-200", Icon: HelpCircle },
+  REJECTED: { label: "Not accepting", className: "bg-rose-50 text-rose-700 border-rose-200", Icon: X },
   INVALID: { label: "Invalid", className: "bg-rose-50 text-rose-700 border-rose-200", Icon: X },
   DISPOSABLE: { label: "Disposable", className: "bg-amber-50 text-amber-700 border-amber-200", Icon: TriangleAlert },
   NO_MX: { label: "No mail server", className: "bg-rose-50 text-rose-700 border-rose-200", Icon: X },

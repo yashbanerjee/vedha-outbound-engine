@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
+import { ScrollText } from "lucide-react";
 import { requirePermission } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getMailSettings } from "@/lib/mail/settings";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { MailboxForm } from "./mailbox-form";
 import { TemplateManager } from "./template-manager";
 
@@ -20,7 +23,14 @@ export default async function EmailAdminPage() {
       <PageHeader
         title="Email"
         description="The shared mailbox everyone sends from, and the templates they start with. Replies are read from this inbox and passed to the employee handling the lead."
-      />
+      >
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/mail-log">
+            <ScrollText />
+            Mail log
+          </Link>
+        </Button>
+      </PageHeader>
       <div className="space-y-6">
         <MailboxForm
           hasPassword={!!settings.passwordEnc}

@@ -9,6 +9,8 @@ import {
   Database,
   Inbox,
   Mail,
+  ScrollText,
+  Tags,
   LayoutDashboard,
   ListChecks,
   ShieldCheck,
@@ -33,7 +35,9 @@ const ICONS = {
   sources: Database,
   ai: Bot,
   email: Mail,
+  mailLog: ScrollText,
   replies: Inbox,
+  statuses: Tags,
 } satisfies Record<string, LucideIcon>;
 
 export function SidebarNav({ items, adminItems }: { items: NavItem[]; adminItems: NavItem[] }) {

@@ -6,7 +6,8 @@ import { can, canAny } from "@/lib/auth/permissions";
 import { leadAccessWhere } from "@/lib/auth/lead-access";
 import { getAiSettings } from "@/lib/ai/queue";
 import { currentWeekStart, weekLabel } from "@/lib/week";
-import { LEAD_STATUSES, LEAD_STATUS_CLASS, LEAD_STATUS_LABEL } from "@/lib/leads/constants";
+import { LEAD_STATUSES, LEAD_STATUS_CLASS } from "@/lib/leads/constants";
+import { getStatusLabels } from "@/lib/leads/status-labels";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const weekStart = currentWeekStart();
   const seesArchive = canAny(user, "leads.view_archive", "leads.view_all");
 
-  const [myWeek, myPendingTotal, myRecent, aiSettings, mail] = await Promise.all([
+  const [myWeek, myPendingTotal, myRecent, aiSettings, mail, statusLabels] = await Promise.all([
     prisma.assignment.groupBy({ by: ["status"], where: { userId: user.id, weekStart }, _count: { _all: true } }),
     prisma.assignment.count({ where: { userId: user.id, status: { not: "DONE" } } }),
     prisma.assignment.findMany({
@@ -35,6 +36,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }),
     getAiSettings(),
     mailCounts(user.id, can(user, "leads.view_all")),
+    getStatusLabels(),
   ]);
   const aiEnabled = aiSettings.enabled;
   const myCount = (s: "PENDING" | "IN_PROGRESS" | "DONE") => myWeek.find((x) => x.status === s)?._count._all ?? 0;
@@ -191,7 +193,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       return (
                         <Link key={s} href={`/archive?status=${s}`}>
                           <Badge variant="outline" className={cn(LEAD_STATUS_CLASS[s], "tabular-nums")}>
-                            {LEAD_STATUS_LABEL[s]} &middot; {n}
+                            {statusLabels[s]} &middot; {n}
                           </Badge>
                         </Link>
                       );

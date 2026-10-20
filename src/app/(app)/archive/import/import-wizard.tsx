@@ -353,8 +353,8 @@ export function ImportWizard({
                   <span>
                     Check email addresses
                     <span className="block text-xs text-muted-foreground">
-                      Flags invalid addresses, disposable providers (Mailinator, Guerrilla Mail, &hellip;) and domains with no mail server. Confirms the domain
-                      accepts mail; it cannot prove a specific inbox exists.
+                      Flags invalid addresses, disposable providers, and domains with no mail server. Deliverable means the mail server accepted
+                      that inbox. Unconfirmed means the domain has a mail server, but the inbox itself was not proven and can still bounce.
                     </span>
                   </span>
                 </label>

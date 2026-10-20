@@ -88,6 +88,13 @@ enum LeadStatus {
   NOT_INTERESTED
 }
 
+/// Display names for the fixed lead pipeline. The status keys stay the same.
+model LeadStatusSettings {
+  id        String   @id @default("default")
+  labels    Json
+  updatedAt DateTime @updatedAt
+}
+
 enum AiVerdict {
   GOOD
   MAYBE
@@ -203,10 +210,15 @@ model LeadComment {
   @@index([leadId, createdAt])
 }
 
-/// How far the email check got. UNVERIFIED means the syntax is fine but the
-/// mail server could not be reached (no internet, or it blocked the check).
+/// How far the email check got.
+/// VALID: the mailbox accepted a delivery check.
+/// DOMAIN: the domain has a mail server, but this inbox was not confirmed.
+/// REJECTED: the mail server refused this address.
+/// UNVERIFIED: syntax is fine, but DNS could not be checked.
 enum EmailStatus {
   VALID
+  DOMAIN
+  REJECTED
   INVALID
   DISPOSABLE
   NO_MX
@@ -362,6 +374,8 @@ model EmailMessage {
   createdAt   DateTime            @default(now())
 
   @@index([leadId, createdAt])
+  @@index([createdAt])
+  @@index([direction, status, createdAt])
 }
 
 enum NotificationType {

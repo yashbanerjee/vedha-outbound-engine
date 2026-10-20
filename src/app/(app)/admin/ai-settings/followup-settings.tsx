@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveFollowUpSettingsAction } from "@/lib/ai/actions";
 import { MAX_FOLLOW_UP_STAGES, ordinal } from "@/lib/leads/followups";
+import { useStatusLabels } from "@/components/leads/status-label-context";
 
 export function FollowUpSettings({ initialDays }: { initialDays: number[] }) {
+  const labels = useStatusLabels();
   const [days, setDays] = useState<number[]>(initialDays);
   const [pending, startTransition] = useTransition();
   const dirty = JSON.stringify(days) !== JSON.stringify(initialDays);
@@ -30,7 +32,7 @@ export function FollowUpSettings({ initialDays }: { initialDays: number[] }) {
           Follow-up schedule
         </CardTitle>
         <CardDescription>
-          When a lead is marked Contacted it enters the follow-up queue. Each follow-up becomes due this many days after the first contact. Changing it
+          When a lead is marked {labels.CONTACTED} it enters the follow-up queue. Each follow-up becomes due this many days after the first contact. Changing it
           re-schedules follow-ups that are not yet due.
         </CardDescription>
       </CardHeader>

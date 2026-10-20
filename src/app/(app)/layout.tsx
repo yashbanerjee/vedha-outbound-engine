@@ -7,10 +7,15 @@ import { SidebarNav, type NavItem } from "@/components/app-shell/sidebar-nav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { logoutAction } from "@/app/login/actions";
+import { getStatusLabels } from "@/lib/leads/status-labels";
+import { StatusLabelProvider } from "@/components/leads/status-label-context";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const unreadReplies = await prisma.notification.count({ where: { userId: user.id, readAt: null } });
+  const [unreadReplies, statusLabels] = await Promise.all([
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+    getStatusLabels(),
+  ]);
 
   const items: NavItem[] = [{ href: "/", label: "Dashboard", icon: "dashboard", exact: true }];
   items.push({ href: "/my-leads", label: "My leads", icon: "myLeads" });
@@ -28,6 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (can(user, "admin.sources")) adminItems.push({ href: "/admin/sources", label: "Lead sources", icon: "sources" });
   if (can(user, "ai.settings")) adminItems.push({ href: "/admin/ai-settings", label: "AI pre-filter", icon: "ai" });
   if (can(user, "email.manage")) adminItems.push({ href: "/admin/email", label: "Email", icon: "email" });
+  if (can(user, "email.manage")) adminItems.push({ href: "/admin/mail-log", label: "Mail log", icon: "mailLog" });
+  if (canAny(user, "leads.statuses", "leads.view_all")) adminItems.push({ href: "/admin/statuses", label: "Lead statuses", icon: "statuses" });
 
   return (
     <div className="flex min-h-screen bg-muted/30">
@@ -56,7 +63,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-7xl p-6 lg:p-8">{children}</div>
+        <div className="mx-auto w-full max-w-7xl p-6 lg:p-8">
+          <StatusLabelProvider labels={statusLabels}>{children}</StatusLabelProvider>
+        </div>
       </main>
     </div>
   );

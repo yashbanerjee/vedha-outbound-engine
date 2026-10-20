@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   "leads.delete": "Delete leads",
   "leads.allocate": "Allocate leads to BDEs",
   "leads.update_status": "Change the status of leads",
+  "leads.statuses": "Rename the lead status labels",
   "leads.comment": "Add comments to leads",
   "ai.score": "Trigger AI scoring on leads",
   "ai.settings": "Change AI pre-filter settings",

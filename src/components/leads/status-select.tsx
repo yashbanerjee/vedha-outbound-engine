@@ -5,7 +5,8 @@ import type { LeadStatus } from "@prisma/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LEAD_STATUSES, LEAD_STATUS_CLASS, LEAD_STATUS_LABEL } from "@/lib/leads/constants";
+import { LEAD_STATUSES, LEAD_STATUS_CLASS } from "@/lib/leads/constants";
+import { useStatusLabels } from "@/components/leads/status-label-context";
 import { updateLeadStatusAction } from "@/lib/leads/actions";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export function StatusSelect({
   size?: "sm" | "default";
   className?: string;
 }) {
+  const labels = useStatusLabels();
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useOptimistic(status);
 
@@ -43,7 +45,7 @@ export function StatusSelect({
       <SelectContent>
         {LEAD_STATUSES.map((s) => (
           <SelectItem key={s} value={s}>
-            {LEAD_STATUS_LABEL[s]}
+            {labels[s]}
           </SelectItem>
         ))}
       </SelectContent>

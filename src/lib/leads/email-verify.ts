@@ -1,15 +1,17 @@
 import { promises as dns } from "node:dns";
 import type { EmailStatus } from "@prisma/client";
+import { newProbeBudget, probeMailbox, type ProbeBudget } from "@/lib/leads/smtp-probe";
 
 /**
- * Email verification without sending mail:
- *  1. syntax check
- *  2. disposable / throwaway domain blocklist
- *  3. live DNS lookup of the domain's MX records (does it accept mail at all?)
+ * Email check, without sending a message:
+ *  1. syntax
+ *  2. disposable domain, or a mail server that belongs to a disposable provider
+ *  3. a real, resolvable MX record (a website alone does not count)
+ *  4. an SMTP delivery check against that mail server, when port 25 can be reached
  *
- * What it cannot do is confirm a specific mailbox exists - mail servers no
- * longer answer that reliably (SMTP probing is blocked and gets IPs blacklisted).
- * VALID therefore means "real, working mail domain", not "this inbox exists".
+ * VALID means the server accepted this address and refused a fake one.
+ * DOMAIN means the domain has mail servers but this inbox was not confirmed,
+ * so it can still bounce. REJECTED means the server refused this address.
  */
 export type EmailCheck = {
   status: EmailStatus;
@@ -121,32 +123,76 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** Does this domain accept mail? MX records win; an A/AAAA record counts as implicit MX (RFC 5321). */
-async function domainAcceptsMail(domain: string): Promise<"yes" | "no" | "unknown"> {
+const DISPOSABLE_MX = ["generator.email", "mailinator.com", "guerrillamail.com", "yopmail.com", "tempmail.com", "trashmail.com", "moakt.com", "10minutemail.com", "maildrop.cc", "mailnesia.com", "getnada.com", "dispostable.com"];
+
+function isDisposableMx(host: string) {
+  const name = host.toLowerCase().replace(/\.$/, "");
+  return DISPOSABLE_MX.some((known) => name === known || name.endsWith("." + known));
+}
+
+type DomainMail =
+  | { kind: "mx"; host: string }
+  | { kind: "disposable-mx"; host: string }
+  | { kind: "no"; detail: string }
+  | { kind: "unknown" };
+
+/** A published, resolvable MX host. A website with only an A record is not a mail server. */
+async function lookupMailServer(domain: string): Promise<DomainMail> {
+  let records: { exchange: string; priority: number }[] = [];
   try {
-    const mx = await withTimeout(dns.resolveMx(domain), DNS_TIMEOUT_MS);
-    if (mx.some((r) => r.exchange && r.exchange !== ".")) return "yes";
-    // "exchange: '.'" with priority 0 is the explicit "domain accepts no mail" signal.
-    if (mx.length > 0) return "no";
+    records = await withTimeout(dns.resolveMx(domain), DNS_TIMEOUT_MS);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOTFOUND" || code === "ENODATA" || code === "ESERVFAIL") {
-      // Fall through to an A-record check below.
-    } else {
-      return "unknown"; // timeout, network down, resolver refused
+    if (code === "ENOTFOUND" || code === "ENODATA") {
+      return { kind: "no", detail: `${domain} has no mail servers. Emails to this address will bounce.` };
     }
+    return { kind: "unknown" };
   }
-  try {
-    const [a, aaaa] = await Promise.allSettled([
-      withTimeout(dns.resolve4(domain), DNS_TIMEOUT_MS),
-      withTimeout(dns.resolve6(domain), DNS_TIMEOUT_MS),
+
+  const hosts = records
+    .map((record) => ({ host: record.exchange.replace(/\.$/, "").toLowerCase(), priority: record.priority }))
+    .filter((record) => record.host && record.host !== ".")
+    .sort((a, b) => a.priority - b.priority);
+  if (records.length > 0 && hosts.length === 0) {
+    return { kind: "no", detail: `${domain} is set up to reject all email.` };
+  }
+  if (hosts.length === 0) {
+    return { kind: "no", detail: `${domain} has no mail servers. Emails to this address will bounce.` };
+  }
+  if (isDisposableMx(hosts[0].host)) return { kind: "disposable-mx", host: hosts[0].host };
+
+  for (const candidate of hosts.slice(0, 3)) {
+    const addresses = await Promise.allSettled([
+      withTimeout(dns.resolve4(candidate.host), DNS_TIMEOUT_MS),
+      withTimeout(dns.resolve6(candidate.host), DNS_TIMEOUT_MS),
     ]);
-    const hasA = a.status === "fulfilled" && a.value.length > 0;
-    const hasAAAA = aaaa.status === "fulfilled" && aaaa.value.length > 0;
-    return hasA || hasAAAA ? "yes" : "no";
-  } catch {
-    return "unknown";
+    const resolvable = addresses.some((result) => result.status === "fulfilled" && result.value.length > 0);
+    if (resolvable) return { kind: "mx", host: candidate.host };
   }
+  return { kind: "no", detail: `${domain} lists a mail server that does not exist. Emails to this address will bounce.` };
+}
+
+function fromProbe(domain: string, probe: Awaited<ReturnType<typeof probeMailbox>>): EmailCheck {
+  if (probe === "accept") {
+    return { status: "VALID", detail: `The mail server for ${domain} accepted this address.` };
+  }
+  if (probe === "reject") {
+    return { status: "REJECTED", detail: `The mail server for ${domain} refused this address. It is not accepting email.` };
+  }
+  return {
+    status: "DOMAIN",
+    detail: `${domain} has mail servers, but this inbox was not confirmed. The address can still bounce.`,
+  };
+}
+
+async function checkDomain(domain: string, email: string, budget: ProbeBudget): Promise<EmailCheck> {
+  const mail = await lookupMailServer(domain);
+  if (mail.kind === "unknown") return { status: "UNVERIFIED", detail: `Could not reach a DNS server to check ${domain}. Try again later.` };
+  if (mail.kind === "no") return { status: "NO_MX", detail: mail.detail };
+  if (mail.kind === "disposable-mx") {
+    return { status: "DISPOSABLE", detail: `${domain} uses ${mail.host}, a disposable mail service. These addresses are throwaway and rarely worth contacting.` };
+  }
+  return fromProbe(domain, await probeMailbox(email, mail.host, budget));
 }
 
 export async function verifyEmail(email: string): Promise<EmailCheck> {
@@ -158,14 +204,7 @@ export async function verifyEmail(email: string): Promise<EmailCheck> {
   if (isDisposableDomain(domain)) {
     return { status: "DISPOSABLE", detail: `${domain} is a disposable email provider. These addresses are throwaway and rarely worth contacting.` };
   }
-  const accepts = await domainAcceptsMail(domain);
-  if (accepts === "yes") {
-    return { status: "VALID", detail: `${domain} has working mail servers. This confirms the domain accepts email; it does not guarantee this exact inbox exists.` };
-  }
-  if (accepts === "no") {
-    return { status: "NO_MX", detail: `${domain} has no mail servers. Emails to this address will bounce.` };
-  }
-  return { status: "UNVERIFIED", detail: `Could not reach a DNS server to check ${domain}. Try again later.` };
+  return checkDomain(domain, value, newProbeBudget());
 }
 
 /**
@@ -195,17 +234,26 @@ export async function verifyEmails(emails: string[], concurrency = 10): Promise<
 
   const domains = Array.from(byDomain.keys());
   let cursor = 0;
+  const budget = newProbeBudget();
   const worker = async () => {
     while (cursor < domains.length) {
       const domain = domains[cursor++];
-      const accepts = await domainAcceptsMail(domain);
-      const check: EmailCheck =
-        accepts === "yes"
-          ? { status: "VALID", detail: `${domain} has working mail servers. This confirms the domain accepts email; it does not guarantee this exact inbox exists.` }
-          : accepts === "no"
-            ? { status: "NO_MX", detail: `${domain} has no mail servers. Emails to this address will bounce.` }
-            : { status: "UNVERIFIED", detail: `Could not reach a DNS server to check ${domain}. Try again later.` };
-      for (const value of byDomain.get(domain)!) result.set(value, check);
+      const addresses = byDomain.get(domain)!;
+      const mail = await lookupMailServer(domain);
+      if (mail.kind === "unknown") {
+        for (const value of addresses) result.set(value, { status: "UNVERIFIED", detail: `Could not reach a DNS server to check ${domain}. Try again later.` });
+        continue;
+      }
+      if (mail.kind === "no") {
+        for (const value of addresses) result.set(value, { status: "NO_MX", detail: mail.detail });
+        continue;
+      }
+      if (mail.kind === "disposable-mx") {
+        const detail = `${domain} uses ${mail.host}, a disposable mail service. These addresses are throwaway and rarely worth contacting.`;
+        for (const value of addresses) result.set(value, { status: "DISPOSABLE", detail });
+        continue;
+      }
+      for (const value of addresses) result.set(value, fromProbe(domain, await probeMailbox(value, mail.host, budget)));
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, domains.length) }, worker));

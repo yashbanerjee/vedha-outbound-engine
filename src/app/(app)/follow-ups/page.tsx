@@ -9,6 +9,7 @@ import { followUpLeadSelect, followUpWhere, getFollowUpDays, ordinal, type Follo
 import { PageHeader } from "@/components/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FollowUpTable } from "./followup-table";
+import { getStatusLabels } from "@/lib/leads/status-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Pr
   const { tab } = await searchParams;
   const current: FollowUpBucket = tab === "upcoming" || tab === "done" ? tab : "due";
 
-  const [access, days] = await Promise.all([leadAccessWhere(user), getFollowUpDays()]);
+  const [access, days, labels] = await Promise.all([leadAccessWhere(user), getFollowUpDays(), getStatusLabels()]);
   const scope = (bucket: FollowUpBucket) => ({ AND: [access, followUpWhere(bucket)] });
 
   const [dueCount, upcomingCount, doneCount, leads] = await Promise.all([
@@ -38,7 +39,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader title="Follow-ups" description="Leads marked Contacted, queued for their next outreach email.">
+      <PageHeader title="Follow-ups" description={`Leads marked ${labels.CONTACTED}, queued for their next outreach email.`}>
         {can(user, "ai.settings") && (
           <Link href="/admin/ai-settings" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
             <CalendarClock className="size-4" />

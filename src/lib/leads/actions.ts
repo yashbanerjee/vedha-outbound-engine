@@ -8,7 +8,8 @@ import { assertPermission, getCurrentUser } from "@/lib/auth/session";
 import { canAccessLead, leadAccessWhere } from "@/lib/auth/lead-access";
 import { can } from "@/lib/auth/permissions";
 import { fail, ok, safeAction, type ActionResult } from "@/lib/action-result";
-import { LEAD_STATUSES, LEAD_STATUS_LABEL } from "@/lib/leads/constants";
+import { LEAD_STATUSES } from "@/lib/leads/constants";
+import { getStatusLabels } from "@/lib/leads/status-labels";
 import { emptyToNull, normalizeDomain, normalizeEmail, normalizeWebsite, parseTags } from "@/lib/leads/normalize";
 import { logActivities, logActivity } from "@/lib/leads/activity";
 import { enqueueScoringJobs, getAiSettings } from "@/lib/ai/queue";
@@ -240,6 +241,7 @@ export async function updateLeadStatusAction(leadId: string, status: string): Pr
       followUpData = { contactedAt, followUpStage: lead.contactedAt ? undefined : 0, nextFollowUpAt: nextFollowUpDate(contactedAt, days, 0) };
     }
 
+    const labels = await getStatusLabels();
     await prisma.$transaction(async (tx) => {
       await tx.lead.update({ where: { id: leadId }, data: { status: next, ...followUpData } });
       // Keep the assignee's work item in sync.
@@ -249,13 +251,13 @@ export async function updateLeadStatusAction(leadId: string, status: string): Pr
         leadId,
         userId: user.id,
         type: "STATUS_CHANGED",
-        message: `Status changed from ${LEAD_STATUS_LABEL[lead.status]} to ${LEAD_STATUS_LABEL[next]}`,
+        message: `Status changed from ${labels[lead.status]} to ${labels[next]}`,
         metadata: { from: lead.status, to: next },
       });
     });
 
     revalidateLeadPaths(leadId);
-    return ok(undefined, `Status set to ${LEAD_STATUS_LABEL[next]}.`);
+    return ok(undefined, `Status set to ${labels[next]}.`);
   });
 }
 
@@ -351,7 +353,7 @@ export async function verifyLeadEmailsAction(leadIds: string[]): Promise<ActionR
     await prisma.$transaction(
       leads.map((l) => {
         const check = checks.get(l.email!.trim().toLowerCase())!;
-        if (check.status !== "VALID" && check.status !== "UNVERIFIED") invalid++;
+        if (check.status !== "VALID" && check.status !== "DOMAIN" && check.status !== "UNVERIFIED") invalid++;
         return prisma.lead.update({
           where: { id: l.id },
           data: { emailStatus: check.status, emailStatusDetail: check.detail, emailCheckedAt: now },

@@ -6,7 +6,8 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AI_VERDICTS, AI_VERDICT_LABEL, LEAD_STATUSES, LEAD_STATUS_LABEL } from "@/lib/leads/constants";
+import { AI_VERDICTS, AI_VERDICT_LABEL, LEAD_STATUSES } from "@/lib/leads/constants";
+import { useStatusLabels } from "@/components/leads/status-label-context";
 
 const ALL = "__all__";
 
@@ -22,6 +23,7 @@ export function ArchiveFilters({ sources, industries, countries, aiEnabled = tru
   const pathname = usePathname();
   const sp = useSearchParams();
   const [, startTransition] = useTransition();
+  const labels = useStatusLabels();
   const [q, setQ] = useState(sp.get("q") ?? "");
 
   const setParam = useCallback(
@@ -85,7 +87,7 @@ export function ArchiveFilters({ sources, industries, countries, aiEnabled = tru
       <FilterSelect
         param="status"
         placeholder="All statuses"
-        options={LEAD_STATUSES.map((s) => ({ value: s, label: LEAD_STATUS_LABEL[s] }))}
+        options={LEAD_STATUSES.map((s) => ({ value: s, label: labels[s] }))}
       />
       {aiEnabled && (
         <FilterSelect

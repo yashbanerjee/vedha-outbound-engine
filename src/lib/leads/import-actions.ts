@@ -200,7 +200,7 @@ export async function importLeadsAction(input: ImportInput): Promise<ActionResul
         if (!check) continue;
         r.emailCheck = check;
         emailsChecked++;
-        if (check.status !== "VALID" && check.status !== "UNVERIFIED") emailsInvalid++;
+        if (check.status !== "VALID" && check.status !== "DOMAIN" && check.status !== "UNVERIFIED") emailsInvalid++;
       }
     }
 

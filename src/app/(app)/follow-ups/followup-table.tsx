@@ -10,6 +10,7 @@ import { EmailBadge } from "@/components/leads/badges";
 import { completeFollowUpAction } from "@/lib/leads/actions";
 import { daysUntil, ordinal } from "@/lib/leads/followups";
 import { cn } from "@/lib/utils";
+import { useStatusLabels } from "@/components/leads/status-label-context";
 import type { FollowUpBucket } from "@/lib/leads/followups";
 import type { FollowUpRow } from "./page";
 
@@ -26,14 +27,15 @@ export function FollowUpTable({
   leads: FollowUpRow[];
   truncated: boolean;
 }) {
+  const labels = useStatusLabels();
   if (leads.length === 0) {
     return (
       <div className="rounded-xl border bg-background p-10 text-center">
         <p className="font-medium">{bucket === "due" ? "Nothing due right now" : bucket === "upcoming" ? "No follow-ups scheduled" : "No completed cycles yet"}</p>
         <p className="mt-1 text-sm text-muted-foreground">
           {bucket === "due"
-            ? "Leads appear here once they have been marked Contacted and their next follow-up date arrives."
-            : "Mark a lead as Contacted and it joins the follow-up cycle automatically."}
+            ? `Leads appear here once they have been marked ${labels.CONTACTED} and their next follow-up date arrives.`
+            : `Mark a lead as ${labels.CONTACTED} and it joins the follow-up cycle automatically.`}
         </p>
       </div>
     );
