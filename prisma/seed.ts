@@ -30,6 +30,7 @@ async function main() {
   const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "admin@example.com").toLowerCase();
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin1234";
   const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail }, select: { id: true } });
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
@@ -108,7 +109,11 @@ async function main() {
   }
 
   console.log("Seed complete.");
-  console.log(`Admin login: ${adminEmail} / ${adminPassword}`);
+  if (existingAdmin) {
+    console.log(`Admin already exists: ${adminEmail} (password left unchanged)`);
+  } else {
+    console.log(`Admin created: ${adminEmail} / ${adminPassword}`);
+  }
   if (process.env.SEED_DEMO !== "false") {
     console.log("Demo logins: manager@example.com, bde1@example.com, bde2@example.com / password123");
   }

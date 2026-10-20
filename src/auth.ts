@@ -13,8 +13,22 @@ const credentialsSchema = z.object({
 /** Permissions / role in the JWT are refreshed from the DB at most this often. */
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
+function rejectSignIn(reason: string) {
+  // Auth.js turns a null return into CredentialsSignin and logs a stack trace.
+  // The reason is the useful line; the stack is suppressed in `logger` below.
+  console.warn(`[auth] sign-in rejected: ${reason}`);
+  return null;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  logger: {
+    error(error) {
+      if (error.name === "CredentialsSignin") return;
+      console.error(`[auth][error] ${error.name}: ${error.message}`);
+      if (error.stack) console.error(error.stack);
+    },
+  },
   providers: [
     Credentials({
       name: "Email and password",
@@ -24,17 +38,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
+        if (!parsed.success) return rejectSignIn("email or password missing or invalid");
         const { email, password } = parsed.data;
+        const normalizedEmail = email.toLowerCase();
 
         const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+          where: { email: normalizedEmail },
           include: { role: true },
         });
-        if (!user || !user.isActive) return null;
+        if (!user) return rejectSignIn(`no user for ${normalizedEmail}`);
+        if (!user.isActive) return rejectSignIn(`user inactive: ${normalizedEmail}`);
 
         const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        if (!ok) return rejectSignIn(`password mismatch for ${normalizedEmail}`);
 
         return {
           id: user.id,

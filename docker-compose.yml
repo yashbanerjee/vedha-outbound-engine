@@ -28,6 +28,9 @@ services:
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       AUTH_TRUST_HOST: "true"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin1234}
+      SEED_DEMO: ${SEED_DEMO:-true}
     ports:
       - "3000:3000"
     command: sh -c "pnpm db:deploy && pnpm db:seed && pnpm start"

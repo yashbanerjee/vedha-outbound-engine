@@ -16,4 +16,4 @@ FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app ./
 EXPOSE 3000
-CMD ["sh", "-c", "pnpm db:deploy && pnpm db:seed && pnpm start"]
+CMD ["sh", "-c", "pnpm db:deploy && pnpm db:seed && if [ \"$EMBEDDED_WORKER\" != false ]; then while true; do pnpm worker; sleep 5; done & fi; exec pnpm start"]
